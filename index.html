@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SpatialJava - Complex Class Demo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&family=Syne:wght@700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#161922;
+  --border:#252b3a;--border-hi:#3a4460;
+  --accent:#5b8af0;--accent2:#c678dd;--green:#98c379;
+  --yellow:#e5c07b;--orange:#d19a66;--red:#e06c75;--cyan:#56b6c2;
+  --text:#abb2bf;--text-hi:#e6edf3;--text-dim:#5c6370;
+  --arrow:#4a90d9;--shadow:rgba(0,0,0,.7);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace; touch-action: none;}
+
+#toolbar{
+  position:fixed;top:0;left:0;right:0;z-index:200;height:48px;
+  background:rgba(13,15,20,.95);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;padding:0 16px;user-select:none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#toolbar::-webkit-scrollbar { display: none; }
+#toolbar h1{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--accent);letter-spacing:.06em;flex:1;white-space:nowrap}
+#toolbar h1 span{color:var(--text-dim)}
+.pill{font-size:10px;padding:3px 9px;border-radius:12px;background:rgba(91,138,240,.1);color:var(--accent);border:1px solid rgba(91,138,240,.22);white-space:nowrap}
+.pill.api-badge{background:rgba(152, 195, 121,.1);color:var(--green);border-color:rgba(152, 195, 121,.22)}
+
+.btn{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 12px;border-radius:7px;cursor:pointer;transition:all .15s;white-space:nowrap; display:flex; align-items:center; gap:6px;}
+.btn:hover{background:var(--border-hi);color:var(--text-hi)}
+.btn-primary{background:rgba(91,138,240,.15);border-color:var(--accent);color:var(--accent);}
+.btn-primary:hover{background:rgba(91,138,240,.25);color:#fff;}
+#hint{font-size:10px;color:var(--text-dim);white-space:nowrap}
+
+#canvas-wrap{position:fixed;inset:48px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
+#canvas-wrap.grabbing{cursor:grabbing}
+#world{position:absolute;top:0;left:0;transform-origin:0 0; transition: transform 0.05s linear;}
+#world.panning{transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);}
+#svg-overlay{position:absolute;top:0;left:0;overflow:visible;pointer-events:none; z-index: 1;}
+#ghosts-layer{position:absolute;top:0;left:0;overflow:visible; z-index: 5;}
+
+.node-card{
+  position:absolute;border-radius:13px;border:1.5px solid var(--border);
+  background:var(--surface);box-shadow:0 6px 28px var(--shadow);
+  min-width:320px;max-width:550px;
+  transition:box-shadow .15s,border-color .15s;
+}
+.node-card:hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 12px 48px var(--shadow);z-index:60!important}
+.node-card.dragging{cursor:grabbing;box-shadow:0 0 0 2px var(--accent),0 28px 72px rgba(0,0,0,.85);z-index:999!important}
+.node-card.is-public{border-left: 4px solid var(--green); border-radius: 10px;}
+
+.card-header{padding:9px 13px;background:rgba(255,255,255,.025);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;cursor:grab;user-select:none;}
+.card-header:active{cursor:grabbing;}
+.card-header .dot{width:9px;height:9px;border-radius:3px;background:var(--accent);flex-shrink:0}
+.node-card.is-public .dot{background:var(--green);}
+.method-name{font-size:12px;font-weight:600;color:var(--text-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.sig-line{padding:4px 13px 5px;font-size:9.5px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none;}
+.card-body{padding:12px 14px;}
+
+/* Transparent Editor */
+.editor-container { position: relative; width: 100%; min-height: 20px;}
+.code-editor, .code-view {
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    line-height:1.6;
+    white-space:pre;
+    tab-size:4;
+    margin:0;
+    padding:0;
+    border:none;
+    width:100%;
+}
+.code-editor {
+    position: absolute; top: 0; left: 0; height: 100%;
+    color: transparent; 
+    background: transparent;
+    caret-color: var(--text-hi);
+    z-index: 2;
+    resize: none;
+    outline: none;
+    overflow: hidden; 
+}
+.code-view {
+    position: relative;
+    z-index: 1;
+    color: var(--text);
+    pointer-events: none; 
+}
+
+/* Nav Mode overrides */
+body.nav-mode .code-editor { pointer-events: none; } 
+body.nav-mode .code-view { pointer-events: auto; } 
+body.nav-mode .fn { cursor: pointer; text-decoration: underline; text-decoration-color: var(--accent); color: var(--accent) !important; transition: all 0.2s;}
+body.nav-mode .fn:hover { background: rgba(91,138,240,.2); border-radius: 3px; }
+
+/* Syntax */
+.kw{color:var(--accent2)} .ty{color:var(--yellow)} .fn{color:#61afef;} 
+.st{color:var(--green)}   .nm{color:var(--orange)}  .cm{color:var(--text-dim);font-style:italic}
+.op{color:var(--cyan)}
+
+/* Edges */
+.edge-path{fill:none;stroke-width:1.5;opacity:.65;}
+.inner-edge{stroke-dasharray: 2 4; opacity: 0.45;}
+.ghost-edge{stroke:var(--red); stroke-dasharray: 4 4; opacity: 0.8;}
+
+/* Ghost Nodes */
+.ghost-btn {
+    position: absolute;
+    transform: translate(0, -50%);
+    background: rgba(224,108,117,.1);
+    border: 1px dashed var(--red);
+    color: var(--red);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family:'JetBrains Mono',monospace;
+    font-size: 10px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ghost-btn:hover {
+    background: rgba(224,108,117,.25);
+    box-shadow: 0 4px 12px rgba(224,108,117,.3);
+}
+
+@keyframes flashCard {
+    0% { box-shadow: 0 0 0 4px var(--accent), 0 12px 48px var(--shadow); border-color: var(--accent); transform: scale(1.02); }
+    100% { box-shadow: 0 6px 28px var(--shadow); border-color: var(--border); transform: scale(1); }
+}
+.flash { animation: flashCard 0.8s ease-out; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>⬡ ComplexReportGenerator<span>.java</span></h1>
+  <span class="pill" id="method-count-pill">16 methods</span>
+  <button class="btn btn-primary" onclick="createMethod('newMethod')">+ New Function</button>
+  <button class="btn" onclick="resetLayout()">Auto-Layout</button>
+  <button class="btn" onclick="fitView()">Fit Screen</button>
+  <span id="hint">Drag headers to move · 2-finger scroll to pan · Pinch to zoom · Hold <b>Cmd/Ctrl</b> to click-navigate</span>
+</div>
+
+<div id="canvas-wrap">
+  <div id="world">
+    <svg id="svg-overlay" width="10000" height="10000">
+      <defs id="marker-defs">
+        <marker id="arr-error" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+            <line x1="2" y1="2" x2="8" y2="8" stroke="#e06c75" stroke-width="2"/>
+            <line x1="8" y1="2" x2="2" y2="8" stroke="#e06c75" stroke-width="2"/>
+        </marker>
+      </defs>
+    </svg>
+    <div id="ghosts-layer"></div>
+  </div>
+</div>
+
+<script>
+// INJECT_DATA_START
+const RAW = {
+  "className": "ComplexReportGenerator",
+  "methods": [
+    {
+      "name": "generateMonthlyReport",
+      "signature": "public Report generateMonthlyReport(String month, String year)",
+      "body": "{\n    initializeContext();\n    \n    // Dense inline calls - edit this block!\n    ReportData data = mergeData(fetchDatabaseRecords(month, year), fetchApiMetrics(month), fetchAuditLogs());\n    \n    ValidationResult validation = runValidationSuite(data);\n    if (!validation.isValid()) {\n        throw new RuntimeException(\"Data validation failed\");\n    }\n    \n    return compilePDF(applyBusinessRules(data), buildHeader(), buildFooter());\n}",
+      "isPublic": true
+    },
+    {
+      "name": "initializeContext",
+      "signature": "private void initializeContext()",
+      "body": "{\n    Logger.info(\"Initializing context...\");\n    loadConfig();\n    setupDbConnections();\n}",
+      "isPublic": false
+    },
+    { "name": "loadConfig", "signature": "private void loadConfig()", "body": "{\n    System.setProperty(\"report.timeout\", \"3000\");\n}", "isPublic": false },
+    { "name": "setupDbConnections", "signature": "private void setupDbConnections()", "body": "{\n    // Connection pooling logic\n}", "isPublic": false },
+    {
+      "name": "fetchDatabaseRecords",
+      "signature": "private DbData fetchDatabaseRecords(String month, String year)",
+      "body": "{\n    System.out.println(\"Connecting to Oracle DB...\");\n    StringBuilder query = new StringBuilder();\n    query.append(\"SELECT * FROM financial_records \");\n    query.append(\"WHERE month = \").append(month);\n    query.append(\" AND year = \").append(year);\n    \n    for(int i=0; i<15; i++) {\n        System.out.println(\"Binding param \" + i);\n    }\n    \n    for(int j=0; j<15; j++) {\n        System.out.println(\"Parsing row \" + j);\n    }\n\n    cleanUpConnection();\n    return new DbData();\n}",
+      "isPublic": false
+    },
+    { "name": "cleanUpConnection", "signature": "private void cleanUpConnection()", "body": "{\n    // Closes DB context\n}", "isPublic": false },
+    { "name": "fetchApiMetrics", "signature": "private ApiData fetchApiMetrics(String month)", "body": "{\n    return new ApiData();\n}", "isPublic": false },
+    { "name": "fetchAuditLogs", "signature": "private AuditData fetchAuditLogs()", "body": "{\n    return new AuditData();\n}", "isPublic": false },
+    { "name": "mergeData", "signature": "private ReportData mergeData(DbData db, ApiData api, AuditData audit)", "body": "{\n    return new ReportData(db, api, audit);\n}", "isPublic": false },
+    { "name": "runValidationSuite", "signature": "private ValidationResult runValidationSuite(ReportData data)", "body": "{\n    return new ValidationResult(true);\n}", "isPublic": false },
+    { "name": "applyBusinessRules", "signature": "private ReportData applyBusinessRules(ReportData data)", "body": "{\n    return data;\n}", "isPublic": false },
+    {
+      "name": "compilePDF",
+      "signature": "private Report compilePDF(ReportData data, Header h, Footer f)",
+      "body": "{\n    System.out.println(\"Initializing PDF Engine...\");\n    Document doc = new Document();\n    \n    for(int k=0; k<12; k++) {\n        System.out.println(\"Writing table row \" + k);\n    }\n    \n    formatTypography();\n    \n    for(int k=0; k<12; k++) {\n        System.out.println(\"Applying styles to cell \" + k);\n    }\n    \n    addWatermark();\n    // Try typing: signDocument(); here to see Ghost Nodes!\n    \n    return new Report(doc);\n}",
+      "isPublic": false
+    },
+    { "name": "formatTypography", "signature": "private void formatTypography()", "body": "{\n    // Load fonts\n}", "isPublic": false },
+    { "name": "addWatermark", "signature": "private void addWatermark()", "body": "{\n    // Add confidential watermark\n}", "isPublic": false },
+    { "name": "buildHeader", "signature": "private Header buildHeader()", "body": "{\n    return new Header(\"ACME Corp\");\n}", "isPublic": false },
+    { "name": "buildFooter", "signature": "private Footer buildFooter()", "body": "{\n    return new Footer(\"Page 1\");\n}", "isPublic": false }
+  ]
+};
+// INJECT_DATA_END
+
+// ── Globals & Palette ────────────────────────────────────────────────────────
+const PALETTE = ['#4a90d9', '#c678dd', '#98c379', '#e5c07b', '#d19a66', '#56b6c2', '#82aaff', '#f78c6c', '#c3e88d'];
+const KW=new Set(['public','private','protected','static','final','void','return','new','if','else','for','while','do','null','true','false','this','super','class','interface','extends','implements','throws','throw','try','catch','finally','int','long','double','float','boolean','char','byte','short','abstract','default', 'String']);
+
+function getColor(targetName) {
+    let hash = 0;
+    for (let i = 0; i < targetName.length; i++) hash = targetName.charCodeAt(i) + ((hash << 5) - hash);
+    return PALETTE[Math.abs(hash) % PALETTE.length];
+}
+
+const defs = document.getElementById('marker-defs');
+PALETTE.forEach((color, i) => {
+    const m = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    m.setAttribute('id', `arr-${i}`);
+    m.setAttribute('markerWidth', '8'); m.setAttribute('markerHeight', '6');
+    m.setAttribute('refX', '7'); m.setAttribute('refY', '3'); m.setAttribute('orient', 'auto');
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    p.setAttribute('points', '0 0,8 3,0 6'); p.setAttribute('fill', color);
+    m.appendChild(p); defs.appendChild(m);
+});
+
+const world=document.getElementById('world');
+const svg=document.getElementById('svg-overlay');
+const ghostsLayer=document.getElementById('ghosts-layer');
+const wrap=document.getElementById('canvas-wrap');
+let transform={x:40,y:40,scale:0.65};
+const nodes={}; let zTop=10;
+
+function applyT(){world.style.transform=`translate(${transform.x}px,${transform.y}px) scale(${transform.scale})`;}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── Parsing & Syntax Highlighting ───────────────────────────────────────────
+function hl(code){
+  let o='',i=0;
+  const s=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  while(i<code.length){
+    if(code[i]==='/'&&code[i+1]==='*'){let j=i+2;while(j<code.length&&!(code[j-1]==='*'&&code[j]==='/'))j++;o+=`<span class="cm">${s(code.slice(i,j+1))}</span>`;i=j+1;continue}
+    if(code[i]==='/'&&code[i+1]==='/'){let j=i;while(j<code.length&&code[j]!=='\n')j++;o+=`<span class="cm">${s(code.slice(i,j))}</span>`;i=j;continue}
+    if(code[i]==='"'){let j=i+1;while(j<code.length&&!(code[j]==='"'&&code[j-1]!=='\\'))j++;o+=`<span class="st">${s(code.slice(i,j+1))}</span>`;i=j+1;continue}
+    if(/[0-9]/.test(code[i])&&(i===0||!/\w/.test(code[i-1]))){let j=i;while(j<code.length&&/[0-9.LlDdFf]/.test(code[j]))j++;o+=`<span class="nm">${s(code.slice(i,j))}</span>`;i=j;continue}
+    if(/[a-zA-Z_$]/.test(code[i])){
+        let j=i;while(j<code.length&&/\w/.test(code[j]))j++;
+        const w=code.slice(i,j);
+        if(KW.has(w)) o+=`<span class="kw">${s(w)}</span>`;
+        else if(code[j]==='(') o+=`<span class="fn" onclick="navigateTo('${w}')">${s(w)}</span>`;
+        else if(/^[A-Z]/.test(w)) o+=`<span class="ty">${s(w)}</span>`;
+        else o+=s(w);
+        i=j;continue;
+    }
+    if('+-*/%=<>!&|^~'.includes(code[i])){o+=`<span class="op">${s(code[i])}</span>`;i++;continue}
+    o+=s(code[i]);i++;
+  }
+  return o;
+}
+
+function parseLocalCalls(code) {
+    const regex = /(?<!\.)\b([a-z]\w*)\s*\(/g;
+    const calls = new Set();
+    let match;
+    while ((match = regex.exec(code)) !== null) {
+        if (!KW.has(match[1])) calls.add(match[1]);
+    }
+    return Array.from(calls);
+}
+
+RAW.methods.forEach(m => {
+    m.isPublic = m.signature.includes('public ');
+    m.calls = parseLocalCalls(m.body);
+});
+
+// ── DOM Creation & Editing ────────────────────────────────────────────────────
+function makeCard(m){
+  const el=document.createElement('div');
+  el.className = 'node-card' + (m.isPublic ? ' is-public' : '');
+  el.id = 'card-' + m.name;
+  
+  const headerHtml = `
+    <div class="card-header">
+        <span class="dot"></span>
+        <span class="method-name" title="${esc(m.signature)}">${esc(m.name)}</span>
+        ${m.isPublic ? '<span class="pill api-badge">API Endpoint</span>' : ''}
+    </div>
+    <div class="sig-line">${esc(m.signature)}</div>
+  `;
+  
+  const bodyHtml = `
+    <div class="card-body">
+        <div class="editor-container">
+            <textarea class="code-editor" spellcheck="false">${esc(m.body)}</textarea>
+            <pre class="code-view" id="view-${m.name}">${hl(m.body)}</pre>
+        </div>
+    </div>
+  `;
+  
+  el.innerHTML = headerHtml + bodyHtml;
+
+  const textarea = el.querySelector('.code-editor');
+  const view = el.querySelector('.code-view');
+  
+  const syncEditor = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = view.offsetHeight + 'px';
+      m.body = textarea.value;
+      view.innerHTML = hl(m.body);
+      m.calls = parseLocalCalls(m.body);
+      nodes[m.name].w = el.offsetWidth;
+      nodes[m.name].h = el.offsetHeight;
+      requestAnimationFrame(drawEdges);
+  };
+  
+  textarea.addEventListener('input', syncEditor);
+  setTimeout(() => textarea.style.height = view.offsetHeight + 'px', 0);
+  
+  return el;
+}
+
+// Dragging Logic (Mouse and Touch - Unlocked for all cards)
+function makeDraggable(el,name){
+  let sx,sy,ox,oy;
+  const start=(cx,cy)=>{el.classList.add('dragging');el.style.zIndex=++zTop;sx=cx;sy=cy;ox=nodes[name].x;oy=nodes[name].y;};
+  const move=(cx,cy)=>{
+      nodes[name].x=ox+(cx-sx)/transform.scale;
+      nodes[name].y=oy+(cy-sy)/transform.scale;
+      el.style.left=nodes[name].x+'px';
+      el.style.top=nodes[name].y+'px';
+      const m = RAW.methods.find(x => x.name === name);
+      if(m) { m.x = nodes[name].x; m.y = nodes[name].y; }
+      drawEdges();
+  };
+  const end=()=>el.classList.remove('dragging');
+
+  // Mouse Drag
+  el.addEventListener('mousedown',e=>{
+    if(e.button!==0 || !e.target.closest('.card-header')) return; 
+    e.preventDefault();
+    e.stopPropagation();
+    start(e.clientX,e.clientY);
+    const mm=ev=>move(ev.clientX,ev.clientY);
+    const mu=()=>{end();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    document.addEventListener('mousemove',mm);
+    document.addEventListener('mouseup',mu);
+  });
+
+  // Touch Drag
+  el.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1 || !e.target.closest('.card-header')) return;
+    e.stopPropagation();
+    start(e.touches[0].clientX,e.touches[0].clientY);
+  },{passive:false});
+  
+  el.addEventListener('touchmove',e=>{
+    if(!el.classList.contains('dragging')) return;
+    if(e.touches.length!==1) return;
+    e.stopPropagation(); e.preventDefault();
+    move(e.touches[0].clientX,e.touches[0].clientY);
+  },{passive:false});
+  
+  el.addEventListener('touchend',e=>{
+    if(!el.classList.contains('dragging')) return;
+    e.stopPropagation();end();
+  },{passive:false});
+}
+
+// ── Graph Drawing & Auto-Layout ───────────────────────────────────────────────
+function calculateLayout() {
+    const publicMethods = RAW.methods.filter(m => m.isPublic);
+    const privateMethods = RAW.methods.filter(m => !m.isPublic);
+    
+    let publicY = 60;
+    publicMethods.forEach(m => {
+        nodes[m.name].x = 60;
+        nodes[m.name].y = publicY;
+        publicY += nodes[m.name].el.offsetHeight + 40;
+    });
+
+    const depths = {};
+    const inDegree = {};
+    privateMethods.forEach(m => { depths[m.name] = 1; inDegree[m.name] = 0; });
+    
+    RAW.methods.forEach(m => {
+        m.calls.forEach(t => { if (inDegree[t] !== undefined) inDegree[t]++; });
+    });
+
+    let queue = publicMethods.map(m => m.name);
+    if(queue.length === 0 && privateMethods.length > 0) queue.push(privateMethods[0].name);
+
+    while (queue.length > 0) {
+        let u = queue.shift();
+        const mNode = RAW.methods.find(x => x.name === u);
+        if (mNode) {
+            mNode.calls.forEach(v => {
+                if (depths[v] !== undefined) {
+                    depths[v] = Math.max(depths[v], (depths[u] || 0) + 1);
+                    inDegree[v]--;
+                    if (inDegree[v] === 0) queue.push(v);
+                }
+            });
+        }
+    }
+
+    const colYOffset = {}; 
+    privateMethods.forEach(m => {
+        const d = depths[m.name] || 1;
+        if(colYOffset[d] === undefined) colYOffset[d] = 60;
+        
+        nodes[m.name].x = 60 + d * 600;
+        nodes[m.name].y = colYOffset[d];
+        colYOffset[d] += nodes[m.name].el.offsetHeight + 60; 
+    });
+
+    Object.keys(nodes).forEach(k => {
+        nodes[k].el.style.left = nodes[k].x + 'px';
+        nodes[k].el.style.top = nodes[k].y + 'px';
+    });
+}
+
+function drawEdges(){
+  svg.innerHTML = '<defs id="marker-defs">' + defs.innerHTML + '</defs>';
+  ghostsLayer.innerHTML = '';
+  const worldRect = world.getBoundingClientRect();
+  const definedMethodNames = new Set(RAW.methods.map(m => m.name));
+
+  RAW.methods.forEach(m=>{
+    const processedMissing = new Set();
+
+    m.calls.forEach((t) => {
+      const F = nodes[m.name];
+      if(!F) return;
+
+      const cardRightX = F.x + F.w;
+      const codeView = F.el.querySelector('.code-view');
+      const spans = Array.from(codeView.querySelectorAll('.fn')).filter(el => el.textContent === t);
+      
+      const isMissing = !definedMethodNames.has(t);
+      const color = isMissing ? '#e06c75' : getColor(t);
+      const colorIdx = PALETTE.indexOf(color);
+
+      spans.forEach(span => {
+          span.style.color = color;
+          span.style.textDecoration = isMissing ? 'line-through' : 'underline';
+          span.style.textDecorationStyle = isMissing ? 'solid' : 'dotted';
+
+          const spanRect = span.getBoundingClientRect();
+          const spanX = (spanRect.right - worldRect.left) / transform.scale;
+          const spanY = (spanRect.top + spanRect.height / 2 - worldRect.top) / transform.scale;
+
+          const innerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          innerPath.setAttribute('class', 'edge-path inner-edge');
+          innerPath.setAttribute('d', `M${spanX + 3},${spanY} L${cardRightX},${spanY}`);
+          innerPath.style.stroke = color;
+          svg.appendChild(innerPath);
+
+          if (isMissing) {
+              if(!processedMissing.has(t)) {
+                  const targetX = cardRightX + 150;
+                  const targetY = spanY;
+                  
+                  const errPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                  errPath.setAttribute('class', 'edge-path ghost-edge');
+                  errPath.setAttribute('d', `M${cardRightX},${spanY} C${cardRightX+50},${spanY} ${targetX-50},${targetY} ${targetX},${targetY}`);
+                  errPath.setAttribute('marker-end', `url(#arr-error)`);
+                  svg.appendChild(errPath);
+
+                  const btn = document.createElement('button');
+                  btn.className = 'ghost-btn';
+                  btn.innerHTML = `<span>+ Create <b>${t}()</b></span>`;
+                  btn.style.left = (targetX + 15) + 'px';
+                  btn.style.top = targetY + 'px';
+                  btn.onclick = () => createMethod(t, cardRightX + 280, targetY);
+                  btn.ontouchstart = (e) => { e.preventDefault(); createMethod(t, cardRightX + 280, targetY); };
+                  ghostsLayer.appendChild(btn);
+                  
+                  processedMissing.add(t);
+              }
+          } else {
+              const T = nodes[t];
+              const targetLeftX = T.x;
+              const targetCenterY = T.y + T.h / 2;
+              
+              const cx1 = cardRightX + Math.max(80, (targetLeftX - cardRightX) * 0.4);
+              const cx2 = targetLeftX - Math.max(80, (targetLeftX - cardRightX) * 0.4);
+              
+              const outerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              outerPath.setAttribute('class', 'edge-path');
+              outerPath.setAttribute('d', `M${cardRightX},${spanY} C${cx1},${spanY} ${cx2},${targetCenterY} ${targetLeftX},${targetCenterY}`);
+              outerPath.style.stroke = color;
+              outerPath.setAttribute('marker-end', `url(#arr-${colorIdx})`);
+              svg.appendChild(outerPath);
+          }
+      });
+    });
+  });
+}
+
+function buildGraph(forceLayout = true){
+  world.querySelectorAll('.node-card').forEach(n=>n.remove());
+  Object.keys(nodes).forEach(k=>delete nodes[k]);
+  
+  RAW.methods.forEach(m=>{
+    const el=makeCard(m);
+    el.style.zIndex=++zTop;
+    world.appendChild(el);
+    nodes[m.name]={el, x: m.x || 0, y: m.y || 0, w:0, h:0};
+    makeDraggable(el,m.name);
+  });
+  
+  requestAnimationFrame(()=>{
+    Object.keys(nodes).forEach(k=>{
+        nodes[k].w=nodes[k].el.offsetWidth;
+        nodes[k].h=nodes[k].el.offsetHeight;
+    });
+    if(forceLayout) calculateLayout();
+    Object.keys(nodes).forEach(k=>{
+        const m = RAW.methods.find(x => x.name === k);
+        m.x = nodes[k].x; m.y = nodes[k].y;
+        nodes[k].el.style.left = m.x + 'px';
+        nodes[k].el.style.top = m.y + 'px';
+    });
+    drawEdges();
+  });
+}
+
+// ── Interaction & Navigation ──────────────────────────────────────────────────
+function createMethod(name, posX, posY) {
+    let finalName = name;
+    let counter = 1;
+    while(RAW.methods.find(m => m.name === finalName)) {
+        finalName = name + counter;
+        counter++;
+    }
+
+    RAW.methods.push({
+        name: finalName,
+        signature: "private void " + finalName + "()",
+        body: "{\n    // TODO: implement logic\n}",
+        calls: [],
+        isPublic: false,
+        x: posX || 600,
+        y: posY || 100
+    });
+    
+    const pill = document.getElementById('method-count-pill');
+    if(pill) pill.textContent = `${RAW.methods.length} methods`;
+
+    buildGraph(false); 
+    setTimeout(() => navigateTo(finalName), 150);
+}
+
+function navigateTo(targetName) {
+    const target = nodes[targetName];
+    if(!target) return;
+    
+    world.classList.add('panning');
+    const vw = wrap.clientWidth;
+    const vh = wrap.clientHeight;
+    
+    transform.x = (vw / 2) - (target.x + target.w / 2) * transform.scale;
+    transform.y = (vh / 2) - (target.y + target.h / 2) * transform.scale;
+    applyT();
+    
+    target.el.classList.add('flash');
+    setTimeout(() => target.el.classList.remove('flash'), 800);
+    setTimeout(() => world.classList.remove('panning'), 400);
+}
+
+// Command Mode Navigation (Cmd/Ctrl keys)
+document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey) document.body.classList.add('nav-mode');
+});
+document.addEventListener('keyup', e => {
+    if (!e.metaKey && !e.ctrlKey) document.body.classList.remove('nav-mode');
+});
+window.addEventListener('blur', () => document.body.classList.remove('nav-mode'));
+
+// ── Canvas Panning & Zoom (Mouse, MacBook Trackpad & Mobile) ──────────────────
+let ps=null,po=null;
+
+// Mouse Background Drag
+wrap.addEventListener('mousedown',e=>{
+    if(e.button!==0 || e.target.closest('.node-card') || e.target.closest('.ghost-btn')) return;
+    e.preventDefault();
+    ps={x:e.clientX,y:e.clientY};po={x:transform.x,y:transform.y};wrap.classList.add('grabbing');
+});
+document.addEventListener('mousemove',e=>{if(!ps)return;transform.x=po.x+(e.clientX-ps.x);transform.y=po.y+(e.clientY-ps.y);applyT();});
+document.addEventListener('mouseup',()=>{ps=null;wrap.classList.remove('grabbing');});
+
+// Trackpad Pan & Smooth Exponential Zoom
+wrap.addEventListener('wheel',e=>{
+  e.preventDefault();
+  
+  if (e.ctrlKey || e.metaKey) {
+      // Smooth exponential zoom proportional to deltaY (MacBook trackpad friendly)
+      const zoomSensitivity = 0.005;
+      const d = Math.exp(-e.deltaY * zoomSensitivity);
+      const r=wrap.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      const ns=Math.min(2.5,Math.max(0.1,transform.scale*d));
+      transform.x=mx-(mx-transform.x)*(ns/transform.scale);
+      transform.y=my-(my-transform.y)*(ns/transform.scale);
+      transform.scale=ns;
+  } else {
+      // Standard 2-finger scroll pans horizontally & vertically
+      transform.x -= e.deltaX;
+      transform.y -= e.deltaY;
+  }
+  applyT();
+},{passive:false});
+
+// Touch (Mobile)
+let tps=null,tpo=null,pDist=null,pScale=null,pMid=null,pOrig=null;
+
+wrap.addEventListener('touchstart',e=>{
+  if(e.target.closest('.node-card') || e.target.closest('.ghost-btn')) return;
+
+  if(e.touches.length===1){
+    tps={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    tpo={x:transform.x,y:transform.y};
+  } else if(e.touches.length===2){
+    const dx=e.touches[1].clientX-e.touches[0].clientX,dy=e.touches[1].clientY-e.touches[0].clientY;
+    pDist=Math.hypot(dx,dy);pScale=transform.scale;
+    pMid={x:(e.touches[0].clientX+e.touches[1].clientX)/2,y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+    pOrig={x:transform.x,y:transform.y};tps=null;
+  }
+},{passive:true});
+
+wrap.addEventListener('touchmove',e=>{
+  if(e.target.closest('.node-card') || e.target.closest('.ghost-btn')) return;
+
+  if(e.touches.length===1&&tps){
+    e.preventDefault();
+    transform.x=tpo.x+(e.touches[0].clientX-tps.x);
+    transform.y=tpo.y+(e.touches[0].clientY-tps.y);
+    applyT();
+  } else if(e.touches.length===2&&pDist!==null){
+    e.preventDefault();
+    const dx=e.touches[1].clientX-e.touches[0].clientX,dy=e.touches[1].clientY-e.touches[0].clientY;
+    const dist=Math.hypot(dx,dy),ns=Math.min(3,Math.max(0.1,pScale*(dist/pDist)));
+    const r=wrap.getBoundingClientRect(),mx=pMid.x-r.left,my=pMid.y-r.top;
+    transform.x=mx-(mx-pOrig.x)*(ns/pScale);
+    transform.y=my-(my-pOrig.y)*(ns/pScale);
+    transform.scale=ns;applyT();
+  }
+},{passive:false});
+
+wrap.addEventListener('touchend',e=>{
+  if(e.touches.length===0){tps=null;pDist=null;}
+  else if(e.touches.length===1){
+    pDist=null;
+    tps={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    tpo={x:transform.x,y:transform.y};
+  }
+},{passive:true});
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function resetLayout(){buildGraph(true);}
+function fitView(){
+  if(!Object.keys(nodes).length)return;
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  Object.values(nodes).forEach(n=>{x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x+n.w);y1=Math.max(y1,n.y+n.h);});
+  const vw=wrap.clientWidth-80,vh=wrap.clientHeight-80,sc=Math.min(1,Math.min(vw/(x1-x0),vh/(y1-y0)));
+  transform={x:(vw-(x1-x0)*sc)/2+40,y:(vh-(y1-y0)*sc)/2+40,scale:sc};
+  world.classList.add('panning');
+  applyT();
+  drawEdges();
+  setTimeout(() => world.classList.remove('panning'), 400);
+}
+
+// Init
+buildGraph(true);
+setTimeout(fitView, 100);
+</script>
+</body>
+</html>
