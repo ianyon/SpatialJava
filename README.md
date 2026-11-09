@@ -2,6 +2,8 @@
 
 SpatialJava is a spatial IDE extension for VS Code that transforms Java development into a 2D architectural experience. Instead of scrolling through long vertical files, SpatialJava maps your methods onto an infinite canvas, allowing you to visualize and edit the logic flow of your classes in real-time.
 
+🎮 **[Live Interactive Demo](https://ianyon.github.io/SpatialJava/)**
+
 ## ✨ Features
 
 - **Spatial Editing:** Edit Java methods directly within 2D nodes. No more vertical scrolling.
