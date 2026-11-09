@@ -37,7 +37,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test tests/visualizer-invariants.test.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",

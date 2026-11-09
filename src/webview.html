@@ -39,7 +39,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 
 #canvas-wrap{position:fixed;inset:48px 0 0 0;overflow:hidden;cursor:grab;touch-action:none}
 #canvas-wrap.grabbing{cursor:grabbing}
-#world{position:absolute;top:0;left:0;transform-origin:0 0; transition: transform 0.05s linear;}
+#world{position:absolute;top:0;left:0;transform-origin:0 0;}
 #world.panning{transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);}
 #svg-overlay{position:absolute;top:0;left:0;overflow:visible;pointer-events:none; z-index: 1;}
 #ghosts-layer{position:absolute;top:0;left:0;overflow:visible; z-index: 5;}
@@ -424,50 +424,115 @@ function calculateLayout() {
     });
 }
 
+function getSpanAnchor(span, F) {
+    if (!F || !F.el) return null;
+    const cardW = F.w || F.el.offsetWidth || 350;
+    const cardH = F.h || F.el.offsetHeight || 150;
+    const cardRightX = F.x + cardW;
+
+    if (!span) {
+        return {
+            innerStartX: cardRightX - 20,
+            cardRightX: cardRightX,
+            spanY: F.y + cardH / 2
+        };
+    }
+
+    const cardRect = F.el.getBoundingClientRect();
+    const spanRect = span.getBoundingClientRect();
+
+    let spanX, spanY;
+    if (cardRect.width > 0 && cardRect.height > 0) {
+        // (span - cardRect) / cardRect eliminates any scale or world translation
+        const relX = ((spanRect.right - cardRect.left) / cardRect.width) * cardW;
+        const relY = ((spanRect.top + spanRect.height / 2 - cardRect.top) / cardRect.height) * cardH;
+        spanX = F.x + Math.max(0, Math.min(cardW, relX));
+        spanY = F.y + Math.max(20, Math.min(cardH - 10, relY));
+    } else {
+        spanX = cardRightX - 20;
+        spanY = F.y + cardH / 2;
+    }
+
+    const innerStartX = Math.min(cardRightX - 2, spanX + 3);
+    return {
+        innerStartX,
+        cardRightX,
+        spanY
+    };
+}
+
+function computeOuterPath(F, T, spanY, isRecursive) {
+    const cardRightX = F.x + (F.w || 350);
+    const targetLeftX = T.x;
+    const targetCenterY = T.y + (T.h || 150) / 2;
+
+    if (isRecursive) {
+        const loopW = 50;
+        const loopTopY = Math.min(spanY, targetCenterY) - 35;
+        return `M${cardRightX},${spanY} C${cardRightX + loopW},${spanY} ${cardRightX + loopW},${loopTopY} ${F.x + (F.w || 350) / 2},${loopTopY} C${F.x - 25},${loopTopY} ${F.x - 25},${targetCenterY} ${targetLeftX},${targetCenterY}`;
+    }
+
+    if (targetLeftX > cardRightX + 25) {
+        // Forward routing
+        const cx1 = cardRightX + Math.max(60, (targetLeftX - cardRightX) * 0.45);
+        const cx2 = targetLeftX - Math.max(60, (targetLeftX - cardRightX) * 0.45);
+        return `M${cardRightX},${spanY} C${cx1},${spanY} ${cx2},${targetCenterY} ${targetLeftX},${targetCenterY}`;
+    }
+
+    // Backward or same-column routing (clearance around card column)
+    const clearanceX = Math.max(cardRightX, targetLeftX + (T.w || 350)) + 60;
+    return `M${cardRightX},${spanY} C${clearanceX},${spanY} ${clearanceX},${targetCenterY} ${targetLeftX},${targetCenterY}`;
+}
+
 function drawEdges(){
   svg.innerHTML = '<defs id="marker-defs">' + defs.innerHTML + '</defs>';
   ghostsLayer.innerHTML = '';
-  const worldRect = world.getBoundingClientRect();
   const definedMethodNames = new Set(RAW.methods.map(m => m.name));
 
   RAW.methods.forEach(m=>{
+    const F = nodes[m.name];
+    if(!F || !F.el) return;
+    if(!F.w || F.w === 0) F.w = F.el.offsetWidth || 350;
+    if(!F.h || F.h === 0) F.h = F.el.offsetHeight || 150;
+
+    const codeView = F.el.querySelector('.code-view');
     const processedMissing = new Set();
 
     m.calls.forEach((t) => {
-      const F = nodes[m.name];
-      if(!F) return;
-
-      const cardRightX = F.x + F.w;
-      const codeView = F.el.querySelector('.code-view');
-      const spans = Array.from(codeView.querySelectorAll('.fn')).filter(el => el.textContent === t);
-      
+      const spans = codeView ? Array.from(codeView.querySelectorAll('.fn')).filter(el => el.textContent === t) : [];
       const isMissing = !definedMethodNames.has(t);
       const color = isMissing ? '#e06c75' : getColor(t);
       const colorIdx = PALETTE.indexOf(color);
 
-      spans.forEach(span => {
-          span.style.color = color;
-          span.style.textDecoration = isMissing ? 'line-through' : 'underline';
-          span.style.textDecorationStyle = isMissing ? 'solid' : 'dotted';
+      // If no DOM span was tagged, use fallback card anchor
+      const targetSpans = spans.length > 0 ? spans : [null];
 
-          const spanRect = span.getBoundingClientRect();
-          const spanX = (spanRect.right - worldRect.left) / transform.scale;
-          const spanY = (spanRect.top + spanRect.height / 2 - worldRect.top) / transform.scale;
+      targetSpans.forEach(span => {
+          if (span) {
+              span.style.color = color;
+              span.style.textDecoration = isMissing ? 'line-through' : 'underline';
+              span.style.textDecorationStyle = isMissing ? 'solid' : 'dotted';
+          }
 
+          const anchor = getSpanAnchor(span, F);
+          if (!anchor) return;
+          const { innerStartX, cardRightX, spanY } = anchor;
+
+          // Inner path (inside card)
           const innerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           innerPath.setAttribute('class', 'edge-path inner-edge');
-          innerPath.setAttribute('d', `M${spanX + 3},${spanY} L${cardRightX},${spanY}`);
+          innerPath.setAttribute('d', `M${innerStartX},${spanY} L${cardRightX},${spanY}`);
           innerPath.style.stroke = color;
           svg.appendChild(innerPath);
 
           if (isMissing) {
               if(!processedMissing.has(t)) {
-                  const targetX = cardRightX + 150;
+                  const targetX = cardRightX + 110;
                   const targetY = spanY;
                   
                   const errPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                   errPath.setAttribute('class', 'edge-path ghost-edge');
-                  errPath.setAttribute('d', `M${cardRightX},${spanY} C${cardRightX+50},${spanY} ${targetX-50},${targetY} ${targetX},${targetY}`);
+                  errPath.setAttribute('d', `M${cardRightX},${spanY} C${cardRightX+40},${spanY} ${targetX-40},${targetY} ${targetX},${targetY}`);
                   errPath.setAttribute('marker-end', `url(#arr-error)`);
                   svg.appendChild(errPath);
 
@@ -484,15 +549,14 @@ function drawEdges(){
               }
           } else {
               const T = nodes[t];
-              const targetLeftX = T.x;
-              const targetCenterY = T.y + T.h / 2;
-              
-              const cx1 = cardRightX + Math.max(80, (targetLeftX - cardRightX) * 0.4);
-              const cx2 = targetLeftX - Math.max(80, (targetLeftX - cardRightX) * 0.4);
-              
+              if (!T || !T.el) return;
+              if (!T.w || T.w === 0) T.w = T.el.offsetWidth || 350;
+              if (!T.h || T.h === 0) T.h = T.el.offsetHeight || 150;
+
+              const pathD = computeOuterPath(F, T, spanY, m.name === t);
               const outerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
               outerPath.setAttribute('class', 'edge-path');
-              outerPath.setAttribute('d', `M${cardRightX},${spanY} C${cx1},${spanY} ${cx2},${targetCenterY} ${targetLeftX},${targetCenterY}`);
+              outerPath.setAttribute('d', pathD);
               outerPath.style.stroke = color;
               outerPath.setAttribute('marker-end', `url(#arr-${colorIdx})`);
               svg.appendChild(outerPath);
@@ -671,7 +735,10 @@ function fitView(){
   world.classList.add('panning');
   applyT();
   drawEdges();
-  setTimeout(() => world.classList.remove('panning'), 400);
+  setTimeout(() => {
+    world.classList.remove('panning');
+    drawEdges();
+  }, 400);
 }
 
 // Init
