@@ -1,20 +1,34 @@
-# SpatialJava
+# ⬡ SpatialJava
 
-An interactive 2D spatial canvas for Java intra-file call hierarchy visualization and live editing inside Visual Studio Code.
+SpatialJava is a spatial IDE extension for VS Code that transforms Java development into a 2D architectural experience. Instead of scrolling through long vertical files, SpatialJava maps your methods onto an infinite canvas, allowing you to visualize and edit the logic flow of your classes in real-time.
 
-## Overview
+## ✨ Features
 
-SpatialJava is a Visual Studio Code extension that transforms traditional vertical Java files into an interactive, 2D spatial canvas (Spatial IDE). Instead of scrolling up and down through hundreds of lines of code to trace execution flow, methods are represented as individual rounded cards arranged horizontally from left to right based on their call depth.
+- **Spatial Editing:** Edit Java methods directly within 2D nodes. No more vertical scrolling.
+- **Live Call Graph:** Real-time SVG connections track method calls within the same file directly from the exact line and word of invocation.
+- **Ghost Scaffolding:** Detects missing method calls and provides "Quick Fix" buttons to generate and wire them up instantly.
+- **API Highlighting:** Public methods are automatically organized in the primary left column to maintain architectural clarity.
+- **Smart Navigation:** Hold Cmd/Ctrl and click any function call to smoothly fly the camera to its definition.
+- **Trackpad & Mobile Optimized:** Full two-finger pan, smooth pinch-to-zoom, and touch support for desktop and mobile devices.
 
-## Key Features
+## 🚀 Getting Started
 
-- **Spatial Call-Stack Comprehension:** Utilizes horizontal monitor space to visualize the call hierarchy within a single class.
-- **Intra-File Focus:** Only visualizes and connects method calls within the same file/class, filtering out external library noise.
-- **Two-Part "Laser Beam" Edge Routing:** Call connections originate from the exact token in code with dashed horizontal lines out to the card edge, transitioning into cubic Bezier curves targeting the invoked method card.
-- **Live Transparent Editor Layering:** In-place code editing using synchronized transparent `<textarea>` layered over syntax-highlighted `<pre>`.
-- **Ghost Nodes & Quick-Fix Scaffolding:** Unresolved method calls are highlighted in red with an interactive quick-fix button to scaffold new methods instantly.
-- **Recursion Handling:** Circular references gracefully route forward to lightweight stub nodes to prevent layout cycles.
+1. Clone this repository.
+2. Run `npm install`.
+3. Run `npm run compile`.
+4. Press `F5` in VS Code to launch the Extension Development Host.
+5. Open any `.java` file and run the command **"SpatialJava: Open Spatial Editor"** (or click the button in the top-right editor title bar).
 
-## Architecture & Design Decisions
+*Tip:* You can also open `src/webview.html` directly in any web browser to try out the standalone interactive demo!
 
-For full technical specifications, AST parsing logic, coordinate space math, and future roadmap, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+## 🛠 Project Structure
+
+- `src/extension.ts`: Main entry point and command registration.
+- `src/parser.ts`: Lightweight Java method and intra-file call parser.
+- `src/VisualizerPanel.ts`: Manages the VS Code Webview lifecycle and data injection.
+- `src/webview.html`: The self-contained spatial UI, editor, and SVG rendering engine.
+- `DESIGN.md`: Complete architectural specification and design decisions.
+
+## ⚖️ License
+
+Distributed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.

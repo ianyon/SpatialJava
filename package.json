@@ -1,0 +1,47 @@
+{
+  "name": "spatial-java",
+  "displayName": "SpatialJava",
+  "description": "A Spatial IDE for Java that maps methods to a 2D canvas with real-time call graph editing.",
+  "version": "1.0.0",
+  "publisher": "ianyon",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization",
+    "Editors"
+  ],
+  "activationEvents": [
+    "onCommand:spatialJava.open"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "spatialJava.open",
+        "title": "SpatialJava: Open Spatial Editor",
+        "category": "SpatialJava"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == java",
+          "command": "spatialJava.open",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "18.x",
+    "typescript": "^5.1.3"
+  }
+}
